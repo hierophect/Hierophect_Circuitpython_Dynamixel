@@ -84,6 +84,7 @@ DYN_ERR_RANGE                   = const(0x08)
 DYN_ERR_CHECKSUM                = const(0x10)
 DYN_ERR_OVERLOAD                = const(0x20)
 DYN_ERR_INST                    = const(0x40)
+DYN_ERR_INVALID                 = const(0x80)
 
 DYN_INST_PING                   = const(0x01)
 DYN_INST_READ                   = const(0x02)
@@ -91,34 +92,67 @@ DYN_INST_WRITE                  = const(0x03)
 DYN_INST_REG_WRITE              = const(0x04)
 DYN_INST_ACTION                 = const(0x05)
 DYN_INST_RESET                  = const(0x06)
-DYN_SYNC_WRITE                  = const(0x83)
+DYN_INST_SYNC_WRITE             = const(0x83)
+
+DYN_BROADCAST_ID                = const(0xFE)
+
+# Send packet structure:
+# | 0xFF | 0xFF | ID | LEN | INST | PARAM_1-PARAM_N | CHECKSUM |
+# Status Packet structure
+# | 0xFF | 0xFF | ID | LEN | ERROR | VALUE_1-VALUE_N | CHECKSUM |
 
 class Dynamixel:
     def __init__(self, uart, direction_pin):
         self._uart = uart
         self._dir = direction_pin
-        # what do do here? Report all connected motors? 
+        # Disable RX when not explicitly reading
+        self._dir.value = True
+        self.last_error = DYN_ERR_INVALID
 
-    def set_register(self, dyn_id, reg_addr, data):
+    # -----------------------
+    # Dynamixel Instructions:
+    # -----------------------
+
+    def ping(self, dyn_id):
+        length = 2
+        inst = DYN_INST_PING
+        checksum = (~(dyn_id+length+inst)+256) % 256
+        data = [255,255,dyn_id,length,inst,checksum]
+        array = bytes(data)
+        # Write out the request
+        self._uart.write(array)
+        time.sleep(0.001) # Delay required to avoid premature opening of RX
+        # Open the RX line and read data
+        self._dir.value = False
+        packet = self._uart.read(6)
+        self._dir.value = True
+        time.sleep(0.001)
+        # Check if packet timed out and is empty
+        if packet is None:
+            raise RuntimeError("Could not find motor at supplied address")
+        # Otherwise, return the error
+        self.last_error = packet[4]
+        return packet[4]
+
+    def read_data(self, dyn_id, reg_addr, nbytes):
         length = 4
-        inst = DYN_INST_WRITE
-        data = data & 0xFF
-        checksum = (~(dyn_id+length+inst+reg_addr+data)+256) % 256
-        data = [255, 255, dyn_id, length, inst, reg_addr, data, checksum]
+        inst = DYN_INST_READ
+        checksum = (~(dyn_id+length+inst+reg_addr+nbytes)+256) % 256
+        data = [255,255,dyn_id,length,inst,reg_addr,nbytes,checksum]
         array = bytes(data)
-        self._dir.value = True
+        # Write out the request
         self._uart.write(array)
-
-    def set_register_dual(self, dyn_id, reg_addr, data):
-        length = 5
-        inst = DYN_INST_WRITE
-        data1 = data & 0xFF
-        data2 = data >> 8
-        checksum = (~(dyn_id+length+inst+reg_addr+data1+data2)+256) % 256
-        data = [255, 255, dyn_id, length, inst, reg_addr, data1, data2, checksum]
-        array = bytes(data)
+        time.sleep(0.001) # Delay required to avoid premature opening of RX
+        # Open the RX line and read data
+        self._dir.value = False
+        packet = self._uart.read(nbytes+6)
         self._dir.value = True
-        self._uart.write(array)
+        time.sleep(0.001)
+        # Check if packet timed out and is empty
+        if packet is None:
+            raise RuntimeError("Could not find motor at supplied address")
+        self.last_error = packet[4]
+        return packet
 
     def write_data(self, dyn_id, reg_addr, parameters):
         length = len(parameters) + 3
@@ -128,39 +162,153 @@ class Dynamixel:
         data.extend(parameters)
         data.append(checksum)
         array = bytes(data)
-        self._dir.value = True
+        # Write the data
         self._uart.write(array)
+        time.sleep(0.001) # Delay required to avoid premature opening of RX
+        # Check for error only if this is not broadcast mode
+        if dyn_id != DYN_BROADCAST_ID:   
+            # Open the RX line, but only return error
+            self._dir.value = False
+            packet = self._uart.read(6)
+            self._dir.value = True
+            time.sleep(0.001)
+            # Check if packet timed out and is empty
+            if packet is None:
+                raise RuntimeError("Could not find motor at supplied address")
+            # self._uart.reset_input_buffer()
+            self.last_error = packet[4]
+        else:
+            self.last_error = DYN_ERR_INVALID
 
-    def read_data(self, dyn_id, reg_addr, nbytes):
-        length = 4
-        inst = DYN_INST_READ
-        checksum = (~(dyn_id+length+inst+reg_addr+nbytes)+256) % 256
-        data = [255,255,dyn_id,length,inst,reg_addr,nbytes,checksum]
+    def reg_write(self, dyn_id, reg_addr, parameters):
+        length = len(parameters) + 3
+        inst = DYN_INST_REG_WRITE
+        checksum = (~(dyn_id+length+inst+reg_addr+sum(parameters))+256) % 256
+        data = [255, 255, dyn_id, length, inst, reg_addr]
+        data.extend(parameters)
+        data.append(checksum)
         array = bytes(data)
         self._uart.write(array)
         time.sleep(0.001)
-        self._dir.value = False
-        retval = self._uart.read(nbytes+6)
-        self._dir.value = True
-        return retval
+        if dyn_id != DYN_BROADCAST_ID:   
+            self._dir.value = False
+            packet = self._uart.read(6)
+            self._dir.value = True
+            time.sleep(0.001)
+            if packet is None:
+                raise RuntimeError("Could not find motor at supplied address")
+            self.last_error = packet[4]
+        else:
+            self.last_error = DYN_ERR_INVALID
+
+    def action(self, dyn_id):
+        length = 2
+        inst = DYN_INST_ACTION
+        checksum = (~(dyn_id+length+inst)+256) % 256
+        data = [255,255,dyn_id,length,inst,checksum]
+        array = bytes(data)
+        self._uart.write(array)
+        time.sleep(0.001)
+        if dyn_id != DYN_BROADCAST_ID:
+            self._dir.value = False
+            packet = self._uart.read(6)
+            self._dir.value = True
+            time.sleep(0.001)
+            if packet is None:
+                raise RuntimeError("Could not find motor at supplied address")
+            self.last_error = packet[4]
+        else:
+            self.last_error = DYN_ERR_INVALID
+
+
+    def reset(self, dyn_id):
+        length = 2
+        inst = DYN_INST_RESET
+        checksum = (~(dyn_id+length+inst)+256) % 256
+        data = [255,255,dyn_id,length,inst,checksum]
+        array = bytes(data)
+        self._uart.write(array)
+        time.sleep(0.001)
+        # Value may adjust baudrate, so no error check.
+        self.last_error = DYN_ERR_INVALID
+
+    def sync_write(self, parameters):
+        if not (isinstance(parameters[0], list)):
+            raise ValueError("Sync parameter list must be multidimensional")
+        dyn_id = DYN_BROADCAST_ID
+        length = len(len(x) for x in parameters) + 4
+        inst = DYN_INST_SYNC_WRITE
+        data_len = len(parameters[0])-1
+        checksum = (~(dyn_id+length+inst+reg_addr+data_len+\
+                    sum(sum(x) for x in parameters))+256) % 256
+        data = [255, 255, dyn_id, length, inst, reg_addr]
+        data.extend(parameters)
+        data.append(checksum)
+        array = bytes(data)
+        self._uart.write(array)
+        time.sleep(0.001)
+        self.last_error = DYN_ERR_INVALID
+        
+    # -------------
+    # API Functions
+    # -------------
+
+    def set_register(self, dyn_id, reg_addr, data):
+        params = [data]
+        self.write_data(dyn_id, reg_addr, params)
+
+    def set_register_dual(self, dyn_id, reg_addr, data):
+        data1 = data & 0xFF
+        data2 = data >> 8
+        params = [data1,data2]
+        self.write_data(dyn_id, reg_addr, params)
 
     def get_register(self, dyn_id, reg_addr):
-        retval = self.read_data(dyn_id, reg_addr, 1)
-        if retval[4] != 0:
-            print("Error" + str(int(retval[4])));
-        return retval[5]
+        packet = self.read_data(dyn_id, reg_addr, 1)
+        return packet[5]
 
-    # TODO
-    # def write_reg(self, dyn_id, reg_addr, data):
-    # def write_reg_dual(self, dyn_id, reg_addr, data):
+    def get_register_dual(self, dyn_id, reg_addr):
+        packet = self.read_data(dyn_id, reg_addr, 2)
+        return packet[5] | (packet[6] << 8)
+
+    # Like get_data, but only returns parameters, not the whole packet
+    def get_bytes(self, dyn_id, reg_addr, nbytes):
+        packet = self.read_data(dyn_id, reg_addr, nbytes)
+        return packet[5:(4+nbytes)]
 
     def set_speed(self, dyn_id, speed):
         self.set_register_dual(dyn_id, DYN_REG_MOVING_SPEED_L, speed)
 
-    def set_pos(self, dyn_id, pos):
+    def set_position(self, dyn_id, pos):
         self.set_register_dual(dyn_id, DYN_REG_GOAL_POSITION_L, pos)
 
     def get_temp(self, dyn_id):
-        self.get_register(dyn_id, DYN_REG_PRESENT_TEMP)
+        return self.get_register(dyn_id, DYN_REG_PRESENT_TEMP)
 
+    def get_error(self, dyn_id):
+        return self.ping(dyn_id)
+
+    def parse_error(self, error=0xFF):
+        if error == 0xFF:
+            error = self.last_error
+
+        if error == DYN_ERR_NONE:
+            print("No Errors Reported\n")
+        elif error & DYN_ERR_VOLTAGE:
+            print("Voltage Error\n")
+        elif error & DYN_ERR_ANGLE:
+            print("Angle Limit Error\n")
+        elif error & DYN_ERR_OVERHEAT:
+            print("Overheat Error\n")
+        elif error & DYN_ERR_RANGE:
+            print("Instruction Range Error\n")
+        elif error & DYN_ERR_CHECKSUM:
+            print("Bad Checksum Error\n")
+        elif error & DYN_ERR_OVERLOAD:
+            print("Over Load Limit Error\n")
+        elif error & DYN_ERR_INST:
+            print("Invalid Instruction Error\n")
+        elif error & DYN_ERR_INVALID:
+            print("No errors available at startup, or for reset or broadcast"\
+                   " instructions\n")
 
