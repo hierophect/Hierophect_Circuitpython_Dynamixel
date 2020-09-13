@@ -19,6 +19,38 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
+
+"""
+`dynamixel`
+================================================================================
+
+Circuitpython driver library for the Dynamixel series of servo motors from
+Robotis.
+
+Dynamixels are a series of smart actuators designed to form the connecting
+joints on a robot or other mechanical structure. They utilize an addressed UART
+bus system, allowing them to be daisy chained to one another with a minimum of
+cabling. Dynamixels also contain an integrated controller for setting torque and
+temperature limits, speed adjustment, continuous rotation mode, and other
+features.
+
+The AX series is supported by this library. Support for the RX and MX series is
+likely but untested.
+
+**Software and Dependencies:**
+
+# * Adafruit's Circuitpython Releases: https://github.com/adafruit/circuitpython/releases
+# * Adafruit's Bus Device library: https://github.com/adafruit/Adafruit_CircuitPython_BusDevice
+# * Adafruit's Register library: https://github.com/adafruit/Adafruit_CircuitPython_Register
+
+* Author(s):
+
+    - Lucian Copeland (hierophect)
+"""
+
+__version__ = "0.0.0-auto.0"
+__repo__ = "https://github.com/hierophect/CircuitPython_dynamixel.git"
+
 import time
 
 # Addresses
