@@ -52,6 +52,7 @@ __version__ = "0.0.0-auto.0"
 __repo__ = "https://github.com/hierophect/CircuitPython_dynamixel.git"
 
 import time
+from micropython import const
 
 # Addresses
 # EEPROM
