@@ -31,40 +31,50 @@ Please ensure all dependencies are available on the CircuitPython filesystem.
 This is easily achieved by downloading
 `the Adafruit library and driver bundle <https://circuitpython.org/libraries>`_.
 
-Installing from PyPI
-=====================
-.. note:: This library is not available on PyPI yet. Install documentation is included
-   as a standard element. Stay tuned for PyPI availability!
+Getting Started
+===============
 
-.. todo:: Remove the above note if PyPI version is/will be available at time of release.
-   If the library is not planned for PyPI, remove the entire 'Installing from PyPI' section.
+For a full description of the Dynamixel's capabilities, please refer to the official materials:
 
-On supported GNU/Linux systems like the Raspberry Pi, you can install the driver locally `from
-PyPI <https://pypi.org/project/adafruit-circuitpython-dynamixel/>`_. To install for current user:
+* `Datasheet <https://www.trossenrobotics.com/images/productdownloads/AX-12(English).pdf>`_
+* `Web Manual <https://emanual.robotis.com/docs/en/dxl/ax/ax-12a/>`_
 
-.. code-block:: shell
+Dynamixel servos use a single-wire, half-duplex UART mode of communication. Since most Adafruit boards are full duplex two-wire UART, a simple circuit must be created to use the servos. This can use buffer logic, as per the datasheet, or use a more crude version with a diode and resistor:
 
-    pip3 install adafruit-circuitpython-dynamixel
+.. image:: images/diode.png
+   :width: 600
 
-To install system-wide (this may be required in some cases):
+By pulling down the Direction Control pin while TX is in use, the RX pin will not recieve problematic data off of the TX pin. A 10k resistor worked in breadboard testing, but your results may vary.
 
-.. code-block:: shell
-
-    sudo pip3 install adafruit-circuitpython-dynamixel
-
-To install in a virtual environment in your current project:
-
-.. code-block:: shell
-
-    mkdir project-name && cd project-name
-    python3 -m venv .env
-    source .env/bin/activate
-    pip3 install adafruit-circuitpython-dynamixel
+Note that 7V or higher on the motor power line is required for the internal controller to turn on - motors will not even return temperature data at lower voltages. The communication line, however, is TTL 5V logic. Double check your connections to ensure the motor power line is not applied to the communication pin.
 
 Usage Example
 =============
 
-.. todo:: Add a quick, simple example. It and other examples should live in the examples folder and be included in docs/examples.rst.
+The following sketch will print the temperature of a motor addressed as 0x00 (the default) and move it between the minimum, halfway, and maximum positions. A communication control pin of D12 is used but can be swapped out with any IO pin.
+
+::
+
+    import board
+    import busio
+    import digitalio
+    import time
+    import circuitpython_dynamixel
+
+    control = digitalio.DigitalInOut(board.D12)
+    control.direction = digitalio.Direction.OUTPUT
+    control.value = True
+    uart = busio.UART(board.TX, board.RX, baudrate=1000000)
+    ax12 = circuitpython_dynamixel.Dynamixel(uart,control)
+    ax12.set_speed(0xfe,0x100)
+    while True:
+        print(ax12.get_temp(0x00))
+        ax12.set_position(0x00,0)
+        time.sleep(1)
+        ax12.set_position(0x00,512)
+        time.sleep(1)
+        ax12.set_position(0x00,1023)
+        time.sleep(1)
 
 Contributing
 ============
