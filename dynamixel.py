@@ -166,7 +166,7 @@ class Dynamixel:
         self._uart.write(array)
         time.sleep(0.001) # Delay required to avoid premature opening of RX
         # Check for error only if this is not broadcast mode
-        if dyn_id != DYN_BROADCAST_ID:   
+        if dyn_id != DYN_BROADCAST_ID:
             # Open the RX line, but only return error
             self._dir.value = False
             packet = self._uart.read(6)
@@ -190,7 +190,7 @@ class Dynamixel:
         array = bytes(data)
         self._uart.write(array)
         time.sleep(0.001)
-        if dyn_id != DYN_BROADCAST_ID:   
+        if dyn_id != DYN_BROADCAST_ID:
             self._dir.value = False
             packet = self._uart.read(6)
             self._dir.value = True
@@ -248,7 +248,7 @@ class Dynamixel:
         self._uart.write(array)
         time.sleep(0.001)
         self.last_error = DYN_ERR_INVALID
-        
+
     # -------------
     # API Functions
     # -------------
