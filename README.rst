@@ -13,10 +13,6 @@ Introduction
     :target: https://github.com/hierophect/CircuitPython_dynamixel/actions
     :alt: Build Status
 
-.. image:: https://img.shields.io/badge/code%20style-black-000000.svg
-    :target: https://github.com/psf/black
-    :alt: Code Style: Black
-
 Circuitpython driver library for the Dynamixel series of servo motors from Robotis
 
 
@@ -85,5 +81,7 @@ before contributing to help this project stay welcoming.
 
 Documentation
 =============
+
+Readthedocs can be found `here <https://circuitpython-dynamixel.readthedocs.io/en/latest/index.html>`_.
 
 For information on building library documentation, please check out `this guide <https://learn.adafruit.com/creating-and-sharing-a-circuitpython-library/sharing-our-docs-on-readthedocs#sphinx-5-1>`_.
